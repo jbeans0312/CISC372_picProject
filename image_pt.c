@@ -13,15 +13,15 @@
 
 enum KernelTypes type;
 
-int thread_count, processed;
+int thread_count;
 
 //Struct to store all args to pass to p_convolute
 typedef struct {
     Image* srcImage;
     Image* destImage;
-    int rank;
 } convArgs;
 
+convArgs c_args;
 //An array of kernel matrices to be used for image convolution.  
 //The indexes of these match the enumeration from the header file. ie. algorithms[BLUR] returns the kernel corresponding to a box blur.
 Matrix algorithms[]={
@@ -86,29 +86,28 @@ void convolute(Image* srcImage,Image* destImage,Matrix algorithm){
 //            destImage: A pointer to a  pre-allocated (including space for the pixel array) structure to receive the convoluted image.  It should be the same size as srcImage
 //            algorithm: The kernel matrix to use for the convolution
 //Returns: Nothing
-void* p_convolute(void *args){
-    convArgs* my_args = (convArgs*) args;
-    int my_rows, bit, span, pix;
-    int my_rank = my_args->rank; 
-    int total_rows = my_args->destImage->height;
-    span=my_args->srcImage->bpp * my_args->srcImage->bpp;
+void* p_convolute(void * rank){
+    int my_rows, my_start, bit, span, pix;
+    long my_rank = (long) rank;
+    int total_rows = c_args.destImage->height;
+    span=c_args.srcImage->bpp * c_args.srcImage->bpp;
 
     //calculate how many rows each thread will process
     my_rows = (int) total_rows / thread_count;
-    if(my_rank==thread_count-1){
+    my_start = (int) my_rank * my_rows;
+    if((int)my_rank==thread_count-1){
         my_rows+=total_rows % thread_count;
     }
-    
+
     //process the given rows for the thread
-    for(int row = processed; row<processed+my_rows; row++){
-        for(pix=0; pix<my_args->srcImage->width; pix++){
-            for(bit=0; bit<my_args->srcImage->bpp; bit++){
-                my_args->destImage->data[Index(pix,row,my_args->srcImage->width,bit,my_args->srcImage->bpp)]=getPixelValue(my_args->srcImage,pix,row,bit,algorithms[type]);
+    for(int row = my_start; row<my_start+my_rows; row++){
+        for(pix=0; pix<c_args.srcImage->width; pix++){
+            for(bit=0; bit<c_args.srcImage->bpp; bit++){
+                c_args.destImage->data[Index(pix,row,c_args.srcImage->width,bit,c_args.srcImage->bpp)]=getPixelValue(c_args.srcImage,pix,row,bit,algorithms[type]);
             }
         }
     }
 
-    processed+= my_rows;
     return NULL;
 }
 
@@ -136,7 +135,6 @@ enum KernelTypes GetKernelType(char* type){
 int main(int argc,char** argv){
     long t1,t2;
     t1=time(NULL);
-    processed = 0; //initialize processed global var
 
     stbi_set_flip_vertically_on_load(0); 
     if (argc!=4) return Usage();
@@ -165,11 +163,9 @@ int main(int argc,char** argv){
 
     //loop to create p_threads
     for(thread=0; thread<thread_count; thread++){
-        convArgs c_args;
         c_args.srcImage = &srcImage;
         c_args.destImage = &destImage;
-        c_args.rank = thread;
-        pthread_create(&thread_handles[thread], NULL, &p_convolute, (void*) &c_args); 
+        pthread_create(&thread_handles[thread], NULL, &p_convolute, (void *) thread); 
     }
     //join the threads
     for(thread=0; thread<thread_count; thread++){
