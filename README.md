@@ -1,4 +1,3 @@
-# CISC372_hw4
-    USE "make image" to compile the original program
-    USE "make image_pt" to compile the pthread version
-    USE "make image_omp" to compile the OpenMP version
+# Parellelizing image processing
+    Using p-threads and OpenMP to parallelize a serial image processing algorithm
+    
